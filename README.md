@@ -15,6 +15,9 @@
 
 The `img2pixi2d` skill turns a single reference image into an **editable** PixiJS v8 scene inside your existing host application: every named object is a real node you can move, hide, restyle or animate independently, with provenance preserved and inferred regions labelled honestly.
 
+`domain.json` registers the `pixi2d` profile for explicitly routed 2D child state. It adds no
+3D sculpt steps and does not bypass the separate evidence and terminal-review gates.
+
 ---
 
 ## Table of contents
