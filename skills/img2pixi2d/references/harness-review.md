@@ -224,3 +224,22 @@ real-host run must still supply the user's image, actual editable factory, nativ
 captures and reviewer observations before the runtime/visual acceptance gate can
 be claimed passed. Registration/doctor/sync need their own disposable harness
 registry or explicit authorization; nothing here mutates installed plugins.
+
+## Program-owned diagnostic replay
+
+`replay.md` documents the explicit frozen `createRoutedPixiScene` ESM ABI,
+complete executable/resource bindings and optional isolated Chromium replay.
+The program captures real CDP viewport PNGs rather than trusting page-controlled
+`canvas.toDataURL`; it writes no reviewed records. The evidence producer accepts
+its `pixi2d-cdp-replay-v1` captures only with the explicit
+`nativeNodeProvenance: unevaluated` and `terminalAcceptance: false` declarations.
+All existing evidence freshness, edit/reset, critical-crop and semantic review
+checks still apply.
+
+This does not promote diagnostic replay or the plugin gate to terminal authority.
+Arbitrary entry/behavior JavaScript shares mutable renderer/browser objects;
+matching pixels and native-looking objects cannot establish unforgeable
+native-node-to-pixel provenance. Base delivery remains blocked by
+`terminal-native-capture-authority-unavailable` pending an independently confined,
+reviewed native verifier. An authenticated semantic quality review is necessary
+but cannot clear that missing authority.

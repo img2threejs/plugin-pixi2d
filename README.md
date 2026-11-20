@@ -261,6 +261,18 @@ pixi2d/
 
 ---
 
+## Diagnostic routed-scene replay
+
+The optional [isolated ESM/CDP replay](skills/img2pixi2d/references/replay.md)
+executes the exact bound scene adapter with pinned local Pixi/Chromium bytes and
+captures real external-browser pixels and edit/reset evidence. It does not attach
+to a user tab, install dependencies, call paid services or overwrite reviewed
+records. Unsupported original host factories are refused, not replaced.
+This is **not terminal acceptance**: native-node provenance remains unevaluated,
+and the base's native-capture-authority blocker is not cleared by these diagnostics.
+
+---
+
 ## License
 
 - **Skill, Python tools and example:** no repository-wide source-code license is declared. Public GitHub visibility and npm's `private: true` flag are not code licenses; contact the maintainers before reuse or redistribution beyond granted permissions.

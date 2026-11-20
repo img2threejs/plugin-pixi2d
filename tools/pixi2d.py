@@ -228,7 +228,23 @@ def current_snapshot(workspace):
             require(candidate["operations"] and set(candidate["operations"]) <= OPERATIONS and candidate["componentIds"] and set(candidate["componentIds"]) <= ids, "candidate-outside-scope")
             for key in ("specFields", "prerequisites", "expectedMeasurements"):
                 require(isinstance(candidate[key], list) and all(isinstance(v, str) and v.strip() for v in candidate[key]), "invalid-candidate-fields")
-    return {"kind": "img2.pixi2d-snapshot", "version": 1, "objectId": inputs["objectId"], "bindings": [binding(workspace, path) for path in paths], "requirements": {key: inputs[key] for key in ("requiredNodes", "criticalFeatures", "behaviorChecks")}, "checks": checks, "scopedCandidates": candidates, "artboard": list(reference[:2])}
+    result = {"kind": "img2.pixi2d-snapshot", "version": 1, "objectId": inputs["objectId"], "bindings": [binding(workspace, path) for path in paths], "requirements": {key: inputs[key] for key in ("requiredNodes", "criticalFeatures", "behaviorChecks")}, "checks": checks, "scopedCandidates": candidates, "artboard": list(reference[:2])}
+    if "replay" in inputs:
+        replay = inputs["replay"]
+        require(set(replay) == {"abi", "entry", "modules", "assets"} and replay["abi"] == "img2.routed-pixi-scene/v1", "invalid-replay-abi")
+        modules = replay["modules"]
+        require(isinstance(modules, list) and modules and len(set(modules)) == len(modules) and replay["entry"] in modules, "explicit-replay-module-closure-required")
+        require(set(modules) <= set(inputs["sources"]), "replay-module-not-editable-source")
+        require(all(Path(path).suffix in {".js", ".mjs"} for path in modules), "replay-requires-browser-esm-no-typescript-fallback")
+        require(isinstance(replay["assets"], list), "invalid-replay-assets")
+        aliases = set()
+        for asset in replay["assets"]:
+            require(set(asset) == {"path", "alias", "type"} and asset["path"] in inputs["assets"], "replay-asset-not-bound")
+            identifier(asset["alias"])
+            require(asset["alias"] not in aliases and asset["type"] in {"texture", "font", "json", "bytes"}, "invalid-replay-asset")
+            aliases.add(asset["alias"])
+        result["replay"] = replay
+    return result
 
 
 def fresh_snapshot(workspace):
@@ -241,7 +257,9 @@ def capture_evidence(workspace, snapshot, snapshot_sha, write=False):
     capture = read_json(local(workspace, str(AREA / "capture.json")))
     require(capture.get("kind") == "img2.pixi2d-capture" and capture.get("version") == 1, "invalid-capture-contract")
     require(capture["snapshotSha256"] == snapshot_sha, "stale-capture")
-    require(capture["producer"] == "pixi2d-native-capture-v1" and capture["renderer"] == "pixi.js" and re.fullmatch(r"8\.[0-9]+\.[0-9]+(?:[-+].*)?", capture["pixiVersion"]), "native-pixi8-capture-required")
+    require(capture["producer"] in {"pixi2d-native-capture-v1", "pixi2d-cdp-replay-v1"} and capture["renderer"] == "pixi.js" and re.fullmatch(r"8\.[0-9]+\.[0-9]+(?:[-+].*)?", capture["pixiVersion"]), "native-pixi8-capture-required")
+    if capture["producer"] == "pixi2d-cdp-replay-v1":
+        require(capture["pixiVersion"] == "8.22.0" and capture.get("nativeNodeProvenance") == "unevaluated" and capture.get("terminalAcceptance") is False and "replay" in snapshot, "cdp-replay-is-nonauthoritative-evidence-only")
     require(capture["nodes"] == snapshot["requirements"]["requiredNodes"], "runtime-nodes-mismatch")
     expected = {"baseline"}
     changing = set()

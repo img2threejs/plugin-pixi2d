@@ -20,7 +20,7 @@ const beneath = (node, root) => {
  * native continuous-coverage review; this helper never declares visual acceptance.
  * Save the returned JSON as .img2/artifacts/pixi2d/capture.json in the workspace.
  */
-export async function captureEditableScene({ app, handle, PIXI, snapshot, behaviors = {} }) {
+export async function captureEditableScene({ app, handle, PIXI, snapshot, behaviors = {}, captureFrame = null }) {
   if (snapshot.kind !== 'img2.pixi2d-snapshot' || snapshot.version !== 1) throw new Error('invalid snapshot');
   if (!(handle.root instanceof PIXI.Container) || !beneath(handle.root, app.stage)) throw new Error('scene is not in the actual host');
   if (!/^8\./.test(PIXI.VERSION)) throw new Error('PixiJS v8 required');
@@ -38,13 +38,13 @@ export async function captureEditableScene({ app, handle, PIXI, snapshot, behavi
   const requested = snapshot.requirements.behaviorChecks.map(check => check.id).sort();
   if (canonical(Object.keys(behaviors).sort()) !== canonical(requested)) throw new Error('missing or unexpected requested behavior probes');
   const images = {};
-  const capture = key => {
+  const capture = async key => {
     app.renderer.render(app.stage);
-    const png = app.canvas.toDataURL('image/png');
+    const png = captureFrame ? await captureFrame(key) : app.canvas.toDataURL('image/png');
     if (!png.startsWith('data:image/png;base64,')) throw new Error('canvas readback failed');
     images[key] = png;
   };
-  capture('baseline');
+  await capture('baseline');
   for (const expected of verifiedNodes) {
     const node = nodeFor(expected.id);
     for (const edit of expected.edits) {
@@ -55,12 +55,12 @@ export async function captureEditableScene({ app, handle, PIXI, snapshot, behavi
         else if (edit === 'visibility') node.visible = !node.visible;
         else if (edit === 'text') node.text = `${node.text} [edit probe]`;
         else throw new Error(`unsupported edit: ${edit}`);
-        capture(key);
+        await capture(key);
       } finally {
         node.position.set(initial.x, initial.y);
         node.visible = initial.visible;
         if (edit === 'text') node.text = initial.text;
-        capture(`${key}-reset`);
+        await capture(`${key}-reset`);
       }
     }
   }
@@ -69,10 +69,10 @@ export async function captureEditableScene({ app, handle, PIXI, snapshot, behavi
     if (typeof probe?.run !== 'function' || typeof probe?.reset !== 'function') throw new Error(`executable host behavior/reset required: ${check.id}`);
     try {
       await probe.run();
-      capture(`behavior-${check.id}`);
+      await capture(`behavior-${check.id}`);
     } finally {
       await probe.reset();
-      capture(`behavior-${check.id}-reset`);
+      await capture(`behavior-${check.id}-reset`);
     }
   }
   const bytes = new TextEncoder().encode(canonical(snapshot));

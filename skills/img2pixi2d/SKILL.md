@@ -63,3 +63,4 @@ advisories acceptance authority.
 - Object mattes and protected neighbours: `references/object-separation.md`.
 - Amodal objects and disoccluded underlying layers: `references/occlusion-completion.md`.
 - Harness artifact, capture producer and blocking review: `references/harness-review.md`.
+- Isolated ESM/CDP diagnostic replay and its native-authority limit: `references/replay.md`.

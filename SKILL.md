@@ -34,3 +34,11 @@ artifact. Hashes prove bindings, not visual correctness. Missing images,
 unexecuted edits, incomplete full-envelope review, critical defects and uncertain
 judgments block completion. A Jev advisory cannot clear this gate; the base alone
 publishes canonical workflow actions. No paid/network calls are made here.
+
+For program-owned **diagnostic** ESM/CDP replay, read
+`skills/img2pixi2d/references/replay.md`. It requires the exact delivered factory's
+explicit routed ESM ABI and independently held runtime pins; unsupported original
+hosts block rather than receiving substitute geometry. It never trusts
+page-controlled `toDataURL`. Same-realm native-node provenance remains
+`unevaluated` and `terminalAcceptance` remains false; neither this replay nor
+the plugin review gate clears the base's native-capture-authority blocker.
