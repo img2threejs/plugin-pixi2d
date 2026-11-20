@@ -93,7 +93,14 @@ PLUGIN="$HOME/.local/share/img2threejs/pixi2d"
 
 The first `--yes` allows npx to download the CLI; the final `--yes` authorizes installer mutations. The installer clones a reviewed, pinned commit, prepares `.venv` with Pillow, and runs `omp plugin link`. It refuses dirty/unrelated checkouts and registrations pointing elsewhere. See [installer commands](cli/README.md).
 
-This is a **native OMP plugin**, not an img2 harness plugin; `img2 add pixi2d` is unsupported. Start a **new OMP session** after installation, then invoke `/skill:img2pixi2d` inside your existing PixiJS project.
+The existing installer remains a **native OMP** installer. This checkout also ships
+an img2 harness manifest (`image → pixi2d-scene`), an explicit-2D route card and a
+blocking editable-review gate. For a development link on harness ≥0.5.0, use
+`img2 add --link /absolute/path/to/pixi2d` (registration requires your authorization).
+See [`harness review contract`](skills/img2pixi2d/references/harness-review.md).
+The harness branch never substitutes 2D for a 3D request and does not enter 3D
+composition. Start a new host session after linking; the OMP skill remains
+`/skill:img2pixi2d`.
 
 ### Alternative: manual Git installation
 

@@ -1,0 +1,13 @@
+{
+  "kind": "img2.route-card",
+  "version": 1,
+  "outputKind": "2d-scene",
+  "requires": {},
+  "notFor": {},
+  "costClass": "local",
+  "deps": [{ "probe": "python3>=3.10" }],
+  "display": {
+    "appliesTo": "Explicitly requested editable 2D artwork in an existing PixiJS host: independent Graphics, Text, Sprite, Container and native 2D Mesh nodes with real canvas and mutation review.",
+    "notFor": "Any 3D request, automatic 3D-to-2D downgrade, recovered volumes, raster-only replacement, or unreviewed animation/occlusion completion. Explicit-2D eligibility is enforced by the base, not this display text."
+  }
+}

@@ -69,7 +69,10 @@ correct separation or completion.
 
 ## Record and resume
 
-Agent authors `.img2pixi2d/reconstruction.json` and a historical `review.json` record. No state SDK/automatic pass controller is provided.
+The standalone agent authors `.img2pixi2d/reconstruction.json` and historical
+`review.json` records. Harness execution additionally requires the current bound
+review and blocking gate in `harness-review.md`; a historical standalone review
+does not clear that gate.
 
 Each review records pass, reviewer, exactly one decision (`continue | refine-spec | refine-code | request-input | stop`), concrete defects, actual global/per-critical assessments, requested runtime observations, evidence paths and approximations.
 

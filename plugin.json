@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "pixi2d",
+  "version": "1.0.0",
+  "description": "Explicit 2D image reconstruction in the existing PixiJS host with editable nodes and a blocking, evidence-bound review gate.",
+  "capabilities": [{ "from": "image", "to": "pixi2d-scene" }],
+  "requires": { "harness": ">=0.5.0", "coreApi": 1 }
+}
