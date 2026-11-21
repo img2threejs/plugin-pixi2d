@@ -135,14 +135,14 @@ async function boundWorkspace(workspace, mode) {
   });
   const saved = {};
   for (const [key, name] of [['captureBinding', 'capture.json'], ['artifactBinding', 'artifact.json']]) {
-    if (mode === 'replay') {
+    if (mode === 'replay' || mode === 'reviewed-replay') {
       const file = await workspaceFile(workspace, AREA + name);
       saved[key] = { path: file.path, sha256: sha(file.bytes) };
       saved[key === 'captureBinding' ? 'capture' : 'artifact'] = JSON.parse(file.bytes);
     } else saved[key] = null;
   }
   const snapshotSha256 = sha(canonical(snapshot));
-  if (mode === 'replay') {
+  if (mode === 'replay' || mode === 'reviewed-replay') {
     requireValue(saved.capture.snapshotSha256 === snapshotSha256 && saved.artifact.snapshotSha256 === snapshotSha256 && saved.artifact.objectId === snapshot.objectId, 'saved-artifact-or-capture-not-current');
   }
   return { workspace, snapshot, snapshotSha256, inputs, replay, profile, files, sources, assets, saved, snapshotBinding: { path: snapshotFile.path, sha256: sha(snapshotFile.bytes) } };
@@ -239,9 +239,23 @@ async function replayScene(state, runtime) {
     requireValue(pageErrors.length === 0, `browser-runtime-error:${pageErrors.join(';')}`);
     requireValue(observed?.ok === true, `scene-replay-failed:${observed?.error ?? 'unknown'}`);
     requireValue(frameIndex === frames.length && canonical(Object.keys(images)) === canonical(frames), 'incomplete-external-capture');
+    // This is a measurement from trusted host/helper code ONLY IF the caller has
+    // separately reviewed the exact scene/dependency closure. Same-realm source
+    // is not confined by these checks and cannot approve itself.
+    const nativeCapture = observed.nativeCapture;
+    requireValue(nativeCapture?.producer === 'pixi2d-native-capture-v2' && nativeCapture.snapshotSha256 === state.snapshotSha256, 'native-helper-result-required');
+    requireValue(canonical(nativeCapture.nodes) === canonical(state.snapshot.requirements.requiredNodes), 'native-helper-node-mismatch');
+    requireValue(canonical(nativeCapture.images) === canonical(Object.fromEntries(Object.entries(images).filter(([key]) => !key.startsWith('isolate-')))), 'native-helper-external-frame-mismatch');
+    requireValue(nativeCapture.provenance?.nodes?.length === state.snapshot.requirements.requiredNodes.length, 'native-helper-provenance-required');
+    for (const [index, node] of state.snapshot.requirements.requiredNodes.entries()) {
+      const record = nativeCapture.provenance.nodes[index];
+      requireValue(record.id === node.id && record.type === node.type, 'native-helper-identity-mismatch');
+      requireValue(record.isolation.isolated === images[`isolate-${node.id}`] && record.isolation.restored === images[`isolate-${node.id}-reset`], 'native-helper-isolation-frame-mismatch');
+      requireValue(images[`isolate-${node.id}-reset`] === images.baseline, `isolation-reset-capture-mismatch:${node.id}`);
+    }
     for (const node of state.snapshot.requirements.requiredNodes) for (const edit of node.edits) {
       const key = `edit-${node.id}-${edit}`;
-      requireValue(images[key] !== images.baseline, `edit-has-no-visible-effect:${key}`);
+      if (!node.noPixelFootprint) requireValue(images[key] !== images.baseline, `edit-has-no-visible-effect:${key}`);
       requireValue(images[`${key}-reset`] === images.baseline, `reset-capture-mismatch:${key}`);
     }
     for (const behavior of state.snapshot.requirements.behaviorChecks) {
@@ -256,7 +270,7 @@ async function replayScene(state, runtime) {
       images: Object.fromEntries(Object.entries(images).filter(([key]) => !key.startsWith('isolate-'))),
       nativeNodeProvenance: 'unevaluated', terminalAcceptance: false,
     };
-    return { replayCapture, browserVersion: browser.version(), browserCommandLine: browserCommandLine.arguments, renderedHostSha256: sha(host), loadedResources, approvedRuntimeRequests: [...routes].map(([path, value]) => ({ path, sha256: sha(value.bytes) })) };
+    return { replayCapture, nativeCapture: { ...nativeCapture, producer: 'pixi2d-external-native-capture-v1' }, browserVersion: browser.version(), browserCommandLine: browserCommandLine.arguments, renderedHostSha256: sha(host), loadedResources, approvedRuntimeRequests: [...routes].map(([path, value]) => ({ path, sha256: sha(value.bytes) })) };
   } finally {
     await browser.close();
   }
@@ -264,7 +278,7 @@ async function replayScene(state, runtime) {
 
 function parseArgs(argv) {
   const command = argv.shift();
-  requireValue(['pins', 'capture', 'replay'].includes(command), 'expected-command:pins|capture|replay');
+  requireValue(['pins', 'capture', 'replay', 'reviewed-capture', 'reviewed-replay'].includes(command), 'expected-command:pins|capture|replay|reviewed-capture|reviewed-replay');
   const args = {};
   const allowed = new Set(['pixi-package', 'playwright-package', 'chromium', 'chromium-root', 'workspace', 'runtime-lock']);
   while (argv.length) {
@@ -296,20 +310,24 @@ async function main() {
     const after = await boundWorkspace(workspace, command);
     requireValue(canonical(state.snapshotBinding) === canonical(after.snapshotBinding) && canonical(state.sources) === canonical(after.sources) && canonical(state.assets) === canonical(after.assets) && canonical(state.saved) === canonical(after.saved), 'inputs-changed-during-replay');
     requireValue(canonical(await runtimeFacts(args)) === canonical(facts), 'runtime-changed-during-replay');
+    const reviewed = command.startsWith('reviewed-');
+    const capture = reviewed ? browserResult.nativeCapture : browserResult.replayCapture;
     process.stdout.write(canonical({
       kind: 'img2.pixi2d-live-replay', version: 1, objectId: state.snapshot.objectId,
       nativeNodeProvenance: 'unevaluated', terminalAcceptance: false,
       snapshotSha256: state.snapshotSha256, snapshotBinding: state.snapshotBinding,
       captureBinding: state.saved.captureBinding, artifactBinding: state.saved.artifactBinding,
-      replayCapture: browserResult.replayCapture, replayCaptureSha256: sha(canonical(browserResult.replayCapture)),
-      matchesSavedCapture: command === 'replay' ? canonical(browserResult.replayCapture) === canonical(state.saved.capture) : null,
+      replayCapture: capture, replayCaptureSha256: sha(canonical(capture)),
+      matchesSavedCapture: command.endsWith('replay') ? canonical(capture) === canonical(state.saved.capture) : null,
       sourceBindings: state.sources, assetBindings: state.assets,
       runtimeLockSha256: sha(lockBytes), runtime: facts,
       browserCommandLine: browserResult.browserCommandLine,
       browserVersion: browserResult.browserVersion, renderedHostSha256: browserResult.renderedHostSha256,
       approvedRuntimeRequests: browserResult.approvedRuntimeRequests,
       loadedResources: browserResult.loadedResources,
-      limitations: ['Arbitrary entry/behavior JavaScript shares the mutable Pixi/browser realm; native-node-to-pixel provenance is unevaluated.', 'External CDP pixels and byte pins are replay evidence, not visual acceptance or terminal authorization.'],
+      limitations: reviewed
+        ? ['Native graph observations require independently reviewed exact source and dependency closure; this command does not grant that approval.', 'Trusted scene code shares the Pixi/browser realm. This is NOT confinement or security for arbitrary JavaScript, nor artwork-quality acceptance.']
+        : ['Arbitrary entry/behavior JavaScript shares the mutable Pixi/browser realm; native-node-to-pixel provenance is unevaluated.', 'External CDP pixels and byte pins are replay evidence, not visual acceptance or terminal authorization.'],
     }) + '\n');
   } catch (error) {
     process.stdout.write(canonical({ kind: 'img2.pixi2d-live-replay', version: 1, status: 'blocked', nativeNodeProvenance: 'unevaluated', terminalAcceptance: false, reasons: [error.message] }) + '\n');

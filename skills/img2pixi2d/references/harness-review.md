@@ -243,10 +243,25 @@ v2 isolation frames for protocol sequencing but omits them from the diagnostic
 replay artifact. `pixi2d-cdp-replay-v1` remains nonauthoritative and the evidence
 producer refuses it; use an actual native capture for the independent review path.
 
-This does not promote diagnostic replay or the plugin gate to terminal authority.
+Diagnostic replay and the plugin gate alone never grant terminal authority.
 Arbitrary entry/behavior JavaScript shares mutable renderer/browser objects;
 matching pixels and native-looking objects cannot establish unforgeable
-native-node-to-pixel provenance. Base delivery remains blocked by
-`terminal-native-capture-authority-unavailable` pending an independently confined,
-reviewed native verifier. An authenticated semantic quality review is necessary
-but cannot clear that missing authority.
+native-node-to-pixel provenance or confinement.
+
+The separate `reviewed-capture`/`reviewed-replay` path emits
+`pixi2d-external-native-capture-v1` with externally captured isolation frames and
+live native bounds/IDs. It is mechanically admissible to this evidence producer,
+but its producer string is not approval. The base's `PixiCaptureAuthority` requires
+a live, frozen host-created `ReviewedPixiPolicy` covering the exact reviewed ESM
+source/resource closure, snapshot, reference, requirements and all dependencies.
+It independently re-reads those bytes, replays the actual delivered factory in
+the pinned owned browser, compares all current captures and validates native
+IDs/bounds/pixel footprints before returning observed evidence. See `replay.md`
+for the exact API. No explicit source review means
+`terminal-native-capture-authority-unavailable`; candidate/model/workspace JSON
+cannot grant source approval.
+
+Reviewed source closure and approved dependencies are trusted code. This does
+**not** establish confinement/security for arbitrary same-realm JavaScript,
+source-to-build equivalence or artwork quality. Parent-owned blocking gates and
+authenticated semantic quality review remain independently necessary.

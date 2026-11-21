@@ -31,6 +31,7 @@ TYPES = {"Container", "Graphics", "Text", "Sprite", "Mesh"}
 CHECKS = ["requirements", "layout", "identity", "ownership", "motion-coverage", "provenance", "lifecycle"]
 OPERATIONS = {"hierarchy", "graphics", "text", "sprite", "mesh", "material", "motion", "input-evidence"}
 NATIVE_PRODUCER = "pixi2d-native-capture-v2"
+EXTERNAL_NATIVE_PRODUCER = "pixi2d-external-native-capture-v1"
 LEGACY_NATIVE_PRODUCER = "pixi2d-native-capture-v1"
 REPLAY_PRODUCER = "pixi2d-cdp-replay-v1"
 PROVENANCE_CONTRACT = "img2.pixi2d-node-provenance/v1"
@@ -414,7 +415,9 @@ def capture_evidence(workspace, snapshot, snapshot_sha, write=False):
     if producer == REPLAY_PRODUCER:
         # External CDP pixels may corroborate a native capture; same-realm replay never establishes node provenance.
         raise ValueError("cdp-replay-cannot-satisfy-node-provenance")
-    require(producer == NATIVE_PRODUCER, "native-pixi8-capture-required")
+    # This external producer is mechanically admissible, NOT source-review authority.
+    # Only the base's independently approved live replay can authorize delivery.
+    require(producer in {NATIVE_PRODUCER, EXTERNAL_NATIVE_PRODUCER}, "native-pixi8-capture-required")
     require(isinstance(capture.get("provenance"), dict), "node-provenance-missing")
     require(capture["nodes"] == snapshot["requirements"]["requiredNodes"], "runtime-nodes-mismatch")
     expected = {"baseline"}

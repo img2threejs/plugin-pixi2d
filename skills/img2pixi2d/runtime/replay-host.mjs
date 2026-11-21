@@ -57,7 +57,7 @@ try {
   if (!handle.root.parent) app.stage.addChild(handle.root);
   if (handle.root.parent !== app.stage) throw new Error('routed-root-must-belong-to-fixed-host');
   app.stop();
-  await captureEditableScene({
+  const nativeCapture = await captureEditableScene({
     app, handle, PIXI, snapshot: CONFIG.snapshot, behaviors: handle.behaviors,
     captureFrame: async key => {
       // Restore fixed viewport presentation, not a second rendering of the artwork.
@@ -72,7 +72,7 @@ try {
     },
   });
   if (typeof handle.dispose === 'function') await handle.dispose();
-  outcome = { ok: true };
+  outcome = { ok: true, nativeCapture };
 } catch (error) {
   outcome = { ok: false, error: String(error?.message ?? error) };
 } finally {

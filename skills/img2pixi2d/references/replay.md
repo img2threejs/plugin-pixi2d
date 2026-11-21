@@ -1,4 +1,4 @@
-# Isolated ESM replay — evidence only, not native-node authority
+# Isolated ESM replay and explicitly reviewed capture authority
 
 `tools/replay-pixi2d.mjs` executes a frozen, explicitly adapted scene in a fresh,
 program-owned Chromium process/profile and captures its **actual viewport via CDP
@@ -6,14 +6,16 @@ from outside the page**. It does not use a user tab or page-controlled
 `canvas.toDataURL`. It never changes the reviewed snapshot, capture, evidence,
 review or artifact files. It installs/downloads nothing and makes no model call.
 
-**Every successful result and capture declares**
+Ordinary `capture`/`replay` results and captures declare
 `nativeNodeProvenance: "unevaluated"` and `terminalAcceptance: false`.
-The arbitrary entry/behavior JavaScript shares mutable Pixi/browser objects with
+Arbitrary entry/behavior JavaScript shares mutable Pixi/browser objects with
 the host. External screenshots and exact byte pins do not exclude renderer
-mutation, fabricated node identities or raster overlays. Neither this replay,
-`matchesSavedCapture: true`, an authenticated semantic review, nor the plugin gate
-can clear the base's `terminal-native-capture-authority-unavailable` blocker.
-This is useful replay/capture evidence, not a stronger confinement claim.
+mutation, fabricated node identities or raster overlays. Diagnostic replay,
+`matchesSavedCapture: true`, semantic review and the plugin gate alone cannot
+clear `terminal-native-capture-authority-unavailable`.
+
+There is a separate, explicitly **trusted reviewed-code** path below. It does not
+confine arbitrary JavaScript. Missing explicit program approval remains fail-closed.
 
 ## Explicit frozen source ABI
 
@@ -127,8 +129,9 @@ node "$SKILL_DIR/tools/replay-pixi2d.mjs" capture --workspace "$PWD" \
   --chromium /approved/ChromiumExecutable --chromium-root /approved/ChromiumBundle
 ```
 
-The caller may save **only the actual `replayCapture` object** as its new
-`capture.json`, then use the ordinary `produce` and native semantic review flow.
+The caller may retain **only the actual `replayCapture` object** as diagnostic
+`capture.json`; ordinary diagnostic v1 cannot pass `produce`. Use the separately
+reviewed native-capture path below for mechanically admissible native evidence.
 The driver itself never overwrites a reviewed artifact. With existing candidate
 `capture.json` and `artifact.json`, use the identical argv with command `replay`
 instead of `capture`. This re-executes the frozen source in a new owned browser,
@@ -164,7 +167,7 @@ blocked replay. `img2.pixi2d-live-replay` v1 includes:
 Blocked results include reasons and the same explicit non-authority fields.
 No result is a gate pass, human review, quality score or canonical action.
 
-## Real-source regression fixture and remaining authority gap
+## Real-source regression fixture
 
 `tests/fixtures/routed-scene.mjs` and `shape.mjs` construct real native Pixi
 Graphics, exercise independent edits, and actually dispose/recreate while
@@ -185,12 +188,77 @@ The focused runtime-reproduction entrypoint is
 visual-quality pass. Absent prerequisites are explicitly skipped by the suite;
 the reproduction refuses without them. No mock-browser fallback exists.
 
-A future terminal authority still needs an independently confined/native-node
-verifier that owns the actual rendering primitives, cannot be monkey-patched by
-source/callback code, and proves the exact bound scene graph generated each
-captured pixel/state. It must preserve the delivered source/host behavior rather
-than quietly replace it with a limited data graph, bind the full executable and
-asset closure, verify real edit/reset/lifecycle effects, recapture/review changed
-bytes, and run live from the base's reviewed command with independently held pins.
-Until that boundary is genuinely implemented and reviewed, terminal acceptance
-remains blocked even when these diagnostic screenshots match perfectly.
+## Host-approved exact source closure
+
+`reviewed-capture` and `reviewed-replay` accept the same explicit runtime argv as
+`capture`/`replay`. They preserve the actual delivered factory and every requested
+state, and additionally return the helper's live native IDs/types/parents/bounds
+and visibility-isolation frames. Every PNG is captured externally via CDP, including
+isolation and reset; the driver cross-checks the returned native capture against
+the actual external frame map. The producer is the distinct
+`pixi2d-external-native-capture-v1`, never a relabelled diagnostic v1. The envelope
+still does not grant approval or terminal acceptance. Save its `replayCapture` as
+the candidate capture, then produce/review/publish normally; the plugin only checks
+mechanical completeness. Do not rewrite an already-reviewed artifact to match.
+
+The base's `pixi_capture_authority.py` exposes:
+
+```python
+authority = PixiCaptureAuthority(live_program_approved_policies)
+receipt = authority.verify_capture(
+    child_workspace, object_id=object_id, revision=revision,
+    artifact_binding={"path": artifact_path, "sha256": artifact_raw_sha},
+    snapshot_binding={"path": snapshot_path, "sha256": snapshot_raw_sha},
+    reference_binding={"path": reference_path, "sha256": admitted_reference_sha},
+    requirements=program_approved_requirements,
+)
+```
+
+Only host/program code may construct a frozen `ReviewedPixiPolicy` after actually
+inspecting the exact source closure and approved dependencies. Required fields:
+`object_id`, `revision`, `snapshot_binding`, `reference_binding`,
+`requirements_json`, `sources`, `assets`, `plugin_root`, `node`,
+`runtime_options`, `runtime_lock_json`, `review_id`, `review_notes`.
+Bindings are `(relative_path, sha256)` tuples; source/asset lists are tuples of
+bindings; JSON fields are canonical UTF-8 bytes; runtime options are a tuple of
+the four `(option, absolute_canonical_path)` pairs above. Runtime locks pin the
+whole Pixi/Playwright/core/browser trees, Node executable and host/helper/driver.
+Review identifiers/notes describe the actual review, not candidate-authored flags.
+There is no JSON policy loader or automatic source approval. The live map is
+retained and checked before/after replay so removing or changing approval revokes it.
+
+The bridge independently re-reads approved source/resources, snapshot/reference,
+current artifact/capture/evidence/review and every runtime pin. It runs the pinned
+program-owned driver in a disposable fresh browser against the exact factory,
+compares the complete current native capture (baseline, isolation, edits, behavior
+and resets), independently checks native IDs/bounds against pixel footprints and
+unambiguous independent ownership, then rechecks input/runtime pins and live
+approval. It returns observed evidence or raises `ParentError`; it never writes
+child files. No approval means `terminal-native-capture-authority-unavailable`.
+The parent still owns terminal gate, authenticated semantic review and promotion.
+
+**Trust statement:** reviewed exact sources and approved dependencies are trusted
+code. This does **not** establish confinement/security for arbitrary same-realm
+JavaScript or source-to-build equivalence. Hashes alone are not code review.
+Synthetic fixture replay proves technical native capture behavior, not artwork
+quality or reconstruction fidelity. Arbitrary submitted code remains unauthorized.
+
+For the base bridge's disposable technical reproduction, explicitly select
+`IMG2_PIXI_PLUGIN`, the same `IMG2_TEST_HARNESS`/`PIXI_REPLAY_RUNTIME` prerequisites,
+and a working native-architecture Node on `PATH`, then run:
+
+```sh
+python3 /path/to/base/forge/tests/test_pixi_capture_authority.py --reproduce
+```
+
+After all writers finish, the parent verifier can run the full new bridge probes:
+
+```sh
+python3 -m unittest discover -s /path/to/base/forge/tests -p test_pixi_capture_authority.py -v
+```
+
+The reproduction constructs only the inspected two-file regression factory,
+produces actual external native evidence and an honestly unreviewed technical
+candidate, then exercises capture authority. It does not invent semantic review,
+publish a passed artifact or make the final terminal decision. No prerequisites
+means an explicit refusal (or a named suite skip), never mock-browser success.

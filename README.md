@@ -276,6 +276,12 @@ to a user tab, install dependencies, call paid services or overwrite reviewed
 records. Unsupported original host factories are refused, not replaced.
 This is **not terminal acceptance**: native-node provenance remains unevaluated,
 and the base's native-capture-authority blocker is not cleared by these diagnostics.
+An additional [host-approved exact-source path](skills/img2pixi2d/references/replay.md#host-approved-exact-source-closure)
+can independently replay native capture evidence only after program code has
+explicitly reviewed the exact ESM/resource closure and approved runtime pins.
+No approval means fail-closed. Reviewed code is trusted code, **not** confinement
+or security for arbitrary same-realm JavaScript; artwork quality remains a separate
+authenticated review.
 
 ---
 
