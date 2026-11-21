@@ -17,6 +17,9 @@ The `img2pixi2d` skill turns a single reference image into an **editable** PixiJ
 
 `domain.json` registers the `pixi2d` profile for explicitly routed 2D child state. It adds no
 3D sculpt steps and does not bypass the separate evidence and terminal-review gates.
+Native capture v2 records per-node visibility isolation and bounds for pixel checks; these
+checks do not authenticate the host or replace independent visual review. Legacy captures
+and CDP replay do not satisfy the v2 provenance requirement.
 
 ---
 

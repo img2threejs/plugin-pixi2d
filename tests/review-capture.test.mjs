@@ -11,6 +11,7 @@ class Container {
     this.x = 0; this.y = 0; this.visible = true;
     this.position = { set: (x, y) => { this.x = x; this.y = y; } };
   }
+  getBounds() { return { x: 0, y: 0, width: 3, height: 8 }; }
 }
 class Graphics extends Container {}
 class Sprite extends Container {}
@@ -26,7 +27,7 @@ function fixture() {
   const nodes = new Map([['badge', badge], ['label', label]]);
   const app = {
     stage,
-    renderer: { render(target) { assert.equal(target, stage); } },
+    renderer: { resolution: 1, render(target) { assert.equal(target, stage); } },
     canvas: {
       width: 8, height: 8,
       // Deliberately not actual PNG evidence; never passed to the harness gate.
@@ -48,7 +49,9 @@ function fixture() {
 test('producer exercises native-handle edits and restores baseline', async () => {
   const input = fixture();
   const result = await captureEditableScene(input);
-  assert.equal(result.producer, 'pixi2d-native-capture-v1');
+  assert.equal(result.producer, 'pixi2d-native-capture-v2');
+  assert.equal(result.provenance.nodes.length, 2);
+  assert.equal(result.provenance.nodes[0].isolation.restored, result.images.baseline);
   assert.match(result.snapshotSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(result.nodes, input.snapshot.requirements.requiredNodes);
   for (const key of ['edit-badge-position', 'edit-badge-visibility', 'edit-label-text']) {

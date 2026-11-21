@@ -38,13 +38,41 @@ export async function captureEditableScene({ app, handle, PIXI, snapshot, behavi
   const requested = snapshot.requirements.behaviorChecks.map(check => check.id).sort();
   if (canonical(Object.keys(behaviors).sort()) !== canonical(requested)) throw new Error('missing or unexpected requested behavior probes');
   const images = {};
-  const capture = async key => {
+  const readFrame = async key => {
     app.renderer.render(app.stage);
     const png = captureFrame ? await captureFrame(key) : app.canvas.toDataURL('image/png');
     if (!png.startsWith('data:image/png;base64,')) throw new Error('canvas readback failed');
-    images[key] = png;
+    return png;
   };
+  const capture = async key => { images[key] = await readFrame(key); };
   await capture('baseline');
+  const resolution = app.renderer.resolution;
+  if (!Number.isFinite(resolution) || resolution <= 0) throw new Error('invalid renderer resolution');
+  const ids = new Map(verifiedNodes.map(expected => [nodeFor(expected.id), expected.id]));
+  const provenanceNodes = [];
+  for (const expected of verifiedNodes) {
+    const node = nodeFor(expected.id);
+    const measured = node.getBounds();
+    const bounds = measured.rectangle ?? measured;
+    if (!['x', 'y', 'width', 'height'].every(key => Number.isFinite(bounds[key]))) throw new Error(`invalid native bounds: ${expected.id}`);
+    let ancestor = node.parent;
+    while (ancestor && ancestor !== handle.root && !ids.has(ancestor)) ancestor = ancestor.parent;
+    const parent = ids.get(ancestor) ?? null;
+    const visibleAtBaseline = node.visible;
+    let isolated, restored;
+    try {
+      node.visible = !visibleAtBaseline;
+      isolated = await readFrame(`isolate-${expected.id}`);
+    } finally {
+      node.visible = visibleAtBaseline;
+      restored = await readFrame(`isolate-${expected.id}-reset`);
+    }
+    provenanceNodes.push({
+      id: expected.id, type: expected.type, parent, visibleAtBaseline,
+      bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+      isolation: { method: 'visibility-toggle', isolated, restored, restoredVisible: node.visible },
+    });
+  }
   for (const expected of verifiedNodes) {
     const node = nodeFor(expected.id);
     for (const edit of expected.edits) {
@@ -79,8 +107,9 @@ export async function captureEditableScene({ app, handle, PIXI, snapshot, behavi
   const hash = await crypto.subtle.digest('SHA-256', bytes);
   const snapshotSha256 = [...new Uint8Array(hash)].map(value => value.toString(16).padStart(2, '0')).join('');
   return {
-    kind: 'img2.pixi2d-capture', version: 1, producer: 'pixi2d-native-capture-v1',
+    kind: 'img2.pixi2d-capture', version: 1, producer: 'pixi2d-native-capture-v2',
     snapshotSha256, renderer: 'pixi.js', pixiVersion: PIXI.VERSION,
     nodes: verifiedNodes, images,
+    provenance: { contract: 'img2.pixi2d-node-provenance/v1', resolution, nodes: provenanceNodes },
   };
 }

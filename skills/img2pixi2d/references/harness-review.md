@@ -112,6 +112,14 @@ readable WebGL drawing buffer for immediate `canvas.toDataURL` after render (see
 `pixijs.md`). Readback failures block; do not replace them with screenshots of code,
 original reference pixels or a separately rendered imitation.
 
+Capture v2 records each declared node's native bounds, parent, visibility, and
+isolated/restored frames from a visibility toggle in the live host. The verifier
+derives changed-pixel regions from those frames, checks bounds and reset, and
+rejects ambiguous independent ownership. A node without visible pixels requires
+an explicit `noPixelFootprint` justification in the frozen requirements. Legacy
+v1 and CDP replay captures cannot satisfy this contract. These checks do not
+authenticate the host or establish visual quality; independent review remains required.
+
 ```sh
 python3 "$SKILL_DIR/tools/pixi2d.py" produce --workspace "$PWD"
 ```

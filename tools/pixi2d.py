@@ -18,6 +18,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import re
 import struct
 import tempfile
@@ -29,6 +30,12 @@ GATE = "pixi2d-editable-review"
 TYPES = {"Container", "Graphics", "Text", "Sprite", "Mesh"}
 CHECKS = ["requirements", "layout", "identity", "ownership", "motion-coverage", "provenance", "lifecycle"]
 OPERATIONS = {"hierarchy", "graphics", "text", "sprite", "mesh", "material", "motion", "input-evidence"}
+NATIVE_PRODUCER = "pixi2d-native-capture-v2"
+LEGACY_NATIVE_PRODUCER = "pixi2d-native-capture-v1"
+REPLAY_PRODUCER = "pixi2d-cdp-replay-v1"
+PROVENANCE_CONTRACT = "img2.pixi2d-node-provenance/v1"
+ISOLATION_METHOD = "visibility-toggle"
+BOUNDS_TOLERANCE_PX = 2  # raster/antialiasing spread tolerated outside a node's reported bounds
 
 
 def require(condition, reason):
@@ -164,6 +171,149 @@ def crop_png(image, box):
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
+def finite(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def capture_frame(url, snapshot, reason):
+    """Admit one captured PNG: a real data URL that decodes at exactly the artboard size."""
+    require(isinstance(url, str) and url.startswith("data:image/png;base64,"), reason)
+    data = base64.b64decode(url.split(",", 1)[1], validate=True)
+    image = png(data)
+    require(list(image[:2]) == snapshot["artboard"], "capture-frame-mismatch")
+    return image, data
+
+
+def changed_pixels(base, other):
+    """One 0/1 byte per pixel: 1 where any RGBA channel differs between two equal-size buffers."""
+    return bytes(a != b for a, b in zip(memoryview(base).cast("I"), memoryview(other).cast("I")))
+
+
+def region_of(flags, width):
+    """Tight [x, y, width, height] box around the set pixels, or None when no pixel changed."""
+    first = flags.find(1)
+    if first < 0:
+        return None
+    top, bottom = first // width, flags.rfind(1) // width
+    left, right = width, -1
+    for y in range(top, bottom + 1):
+        row = flags[y * width:(y + 1) * width]
+        start = row.find(1)
+        if start >= 0:
+            left, right = min(left, start), max(right, row.rfind(1))
+    return [left, top, right - left + 1, bottom - top + 1]
+
+
+def disjoint(a, b):
+    return a[0] + a[2] <= b[0] or b[0] + b[2] <= a[0] or a[1] + a[3] <= b[1] or b[1] + b[3] <= a[1]
+
+
+def node_provenance(capture, snapshot, baseline, visibility_frames, profile_resolution):
+    """Verify the capture's per-node provenance and return the measured evidence.
+
+    Every pixel region, footprint, overlap and exclusive-pixel count below is derived
+    here from the captured isolation frames. Nothing is read from a producer-reported
+    region or inferred from source text. A node without a measurable footprint must
+    carry a justification in the frozen requirements and is still measured to be empty.
+    Bounds, parent links and resolution are scene-graph values the capture runtime
+    measured in the live host; they are cross-checked against the pixels, never
+    used to produce them. Pixel evidence cannot authenticate the host that produced it.
+    """
+    provenance = capture.get("provenance")
+    require(isinstance(provenance, dict), "node-provenance-missing")
+    require(set(provenance) == {"contract", "resolution", "nodes"} and provenance["contract"] == PROVENANCE_CONTRACT, "invalid-node-provenance-contract")
+    resolution = provenance["resolution"]
+    require(finite(resolution) and resolution > 0, "invalid-node-provenance-resolution")
+    require(profile_resolution is None or resolution == profile_resolution, "node-provenance-resolution-mismatch")
+    records = provenance["nodes"]
+    require(isinstance(records, list), "invalid-node-provenance-records")
+    nodes = snapshot["requirements"]["requiredNodes"]
+    declared = {node["id"] for node in nodes}
+    by_id = {}
+    for record in records:
+        ident = record.get("id") if isinstance(record, dict) else None
+        require(isinstance(ident, str), "invalid-node-provenance-record")
+        require(ident in declared, "node-provenance-unexpected:" + ident)
+        require(ident not in by_id, "node-provenance-duplicate:" + ident)
+        by_id[ident] = record
+    width, height = snapshot["artboard"]
+    order, parents, measured, result = [], {}, {}, {}
+    for node in nodes:
+        ident = node["id"]
+        record = by_id.get(ident)
+        require(record is not None, "node-provenance-missing:" + ident)
+        require(set(record) == {"id", "type", "parent", "visibleAtBaseline", "bounds", "isolation"}, "invalid-node-provenance-record:" + ident)
+        require(record["type"] == node["type"], "node-provenance-identity-mismatch:" + ident)
+        parent = record["parent"]
+        require(parent is None or (isinstance(parent, str) and parent in declared and parent != ident), "node-provenance-invalid-parent:" + ident)
+        parents[ident] = parent
+        require(type(record["visibleAtBaseline"]) is bool, "invalid-node-provenance-record:" + ident)
+        bounds = record["bounds"]
+        require(isinstance(bounds, dict) and set(bounds) == {"x", "y", "width", "height"} and all(finite(value) for value in bounds.values()) and bounds["width"] >= 0 and bounds["height"] >= 0, "node-bounds-invalid:" + ident)
+        isolation = record["isolation"]
+        require(isinstance(isolation, dict) and set(isolation) == {"method", "isolated", "restored", "restoredVisible"} and isolation["method"] == ISOLATION_METHOD and type(isolation["restoredVisible"]) is bool, "invalid-node-isolation-record:" + ident)
+        require(isolation["restoredVisible"] is record["visibleAtBaseline"], "node-restore-mismatch:" + ident)
+        isolated, isolated_data = capture_frame(isolation["isolated"], snapshot, "real-png-isolation-capture-required:" + ident)
+        restored, restored_data = capture_frame(isolation["restored"], snapshot, "real-png-isolation-capture-required:" + ident)
+        require(restored[2] == baseline, "node-restore-mismatch:" + ident)
+        flags = changed_pixels(baseline, isolated[2])
+        pixels = flags.count(1)
+        region = region_of(flags, width)
+        justification = node.get("noPixelFootprint")
+        if justification is not None:
+            require(pixels == 0, "declared-empty-footprint-contradicted:" + ident)
+        else:
+            require(pixels > 0, "node-footprint-empty:" + ident)
+            require(bounds["width"] > 0 and bounds["height"] > 0, "node-bounds-empty:" + ident)
+            left, top = bounds["x"] * resolution, bounds["y"] * resolution
+            right, bottom = left + bounds["width"] * resolution, top + bounds["height"] * resolution
+            require(right > 0 and bottom > 0 and left < width and top < height, "node-bounds-outside-artboard:" + ident)
+            x, y, w, h = region
+            require(x >= math.floor(left) - BOUNDS_TOLERANCE_PX and y >= math.floor(top) - BOUNDS_TOLERANCE_PX and x + w <= math.ceil(right) + BOUNDS_TOLERANCE_PX and y + h <= math.ceil(bottom) + BOUNDS_TOLERANCE_PX, "node-region-outside-bounds:" + ident)
+            measured[ident] = {"region": region, "mask": int.from_bytes(flags, "little")}
+        if "visibility" in node["edits"]:
+            # The visibility edit toggles exactly the node the isolation toggled, from the same baseline state.
+            require(visibility_frames[ident] == isolated[2], "isolation-differs-from-visibility-edit:" + ident)
+        order.append(ident)
+        result[ident] = {"id": ident, "type": node["type"], "parent": parent, "footprint": "measured" if justification is None else "declared-none", "justification": justification, "bounds": bounds, "region": region, "pixels": pixels, "exclusivePixels": 0, "isolatedSha256": digest(isolated_data), "restoredSha256": digest(restored_data)}
+    ancestors = {}
+    for ident in order:
+        chain, current = set(), parents[ident]
+        while current is not None:
+            require(current != ident and current not in chain, "node-provenance-parent-cycle:" + ident)
+            chain.add(current)
+            current = parents[current]
+        ancestors[ident] = chain
+    overlaps, rivals = [], {ident: [] for ident in measured}
+    ids = [ident for ident in order if ident in measured]
+    for index, first in enumerate(ids):
+        for second in ids[index + 1:]:
+            a, b = measured[first], measured[second]
+            if disjoint(a["region"], b["region"]):
+                continue
+            shared = (a["mask"] & b["mask"]).bit_count()
+            if not shared:
+                continue
+            nested = first in ancestors[second] or second in ancestors[first]
+            overlaps.append({"a": first, "b": second, "relation": "nested" if nested else "independent", "sharedPixels": shared})
+            if not nested:
+                rivals[first].append(second)
+                rivals[second].append(first)
+    # Co-changed pixels are reported, never assigned to one node. A node whose every
+    # measured pixel is also changed by an unrelated node has no independently
+    # established region, so ownership is ambiguous and the capture is refused.
+    ambiguous = []
+    for ident in ids:
+        taken = 0
+        for rival in rivals[ident]:
+            taken |= measured[rival]["mask"]
+        result[ident]["exclusivePixels"] = (measured[ident]["mask"] & ~taken).bit_count()
+        if not result[ident]["exclusivePixels"]:
+            ambiguous.append("ambiguous-node-ownership:%s:no-exclusive-pixels:shared-with=%s" % (ident, ",".join(rivals[ident])))
+    require(not ambiguous, ";".join(ambiguous))
+    return {"status": "measured", "contract": PROVENANCE_CONTRACT, "resolution": provenance["resolution"], "boundsTolerancePx": BOUNDS_TOLERANCE_PX, "nodes": [result[ident] for ident in order], "overlaps": overlaps}
+
+
 def current_snapshot(workspace):
     inputs_path = str(AREA / "inputs.json")
     inputs = read_json(local(workspace, inputs_path))
@@ -185,7 +335,8 @@ def current_snapshot(workspace):
         require(isinstance(edits, list) and edits and len(set(edits)) == len(edits), "node-edit-probes-required")
         require(set(edits) <= {"position", "visibility", "text"}, "unsupported-edit")
         require("text" not in edits or node["type"] == "Text", "native-text-required")
-    leaves = [node for node in nodes if node["type"] != "Container"]
+        require("noPixelFootprint" not in node or (isinstance(node["noPixelFootprint"], str) and bool(node["noPixelFootprint"].strip())), "invalid-no-pixel-footprint-justification")
+    leaves = [node for node in nodes if node["type"] != "Container" and "noPixelFootprint" not in node]
     require(leaves, "renderable-editable-node-required")
     require(not (len(leaves) == 1 and leaves[0]["type"] == "Sprite") or inputs.get("atomicGraphic") is True, "raster-only-scene-refused")
     checks = list(CHECKS)
@@ -257,9 +408,14 @@ def capture_evidence(workspace, snapshot, snapshot_sha, write=False):
     capture = read_json(local(workspace, str(AREA / "capture.json")))
     require(capture.get("kind") == "img2.pixi2d-capture" and capture.get("version") == 1, "invalid-capture-contract")
     require(capture["snapshotSha256"] == snapshot_sha, "stale-capture")
-    require(capture["producer"] in {"pixi2d-native-capture-v1", "pixi2d-cdp-replay-v1"} and capture["renderer"] == "pixi.js" and re.fullmatch(r"8\.[0-9]+\.[0-9]+(?:[-+].*)?", capture["pixiVersion"]), "native-pixi8-capture-required")
-    if capture["producer"] == "pixi2d-cdp-replay-v1":
-        require(capture["pixiVersion"] == "8.22.0" and capture.get("nativeNodeProvenance") == "unevaluated" and capture.get("terminalAcceptance") is False and "replay" in snapshot, "cdp-replay-is-nonauthoritative-evidence-only")
+    require(capture["renderer"] == "pixi.js" and re.fullmatch(r"8\.[0-9]+\.[0-9]+(?:[-+].*)?", capture["pixiVersion"]), "native-pixi8-capture-required")
+    producer = capture.get("producer")
+    require(producer != LEGACY_NATIVE_PRODUCER, "capture-predates-node-provenance-contract")
+    if producer == REPLAY_PRODUCER:
+        # External CDP pixels may corroborate a native capture; same-realm replay never establishes node provenance.
+        raise ValueError("cdp-replay-cannot-satisfy-node-provenance")
+    require(producer == NATIVE_PRODUCER, "native-pixi8-capture-required")
+    require(isinstance(capture.get("provenance"), dict), "node-provenance-missing")
     require(capture["nodes"] == snapshot["requirements"]["requiredNodes"], "runtime-nodes-mismatch")
     expected = {"baseline"}
     changing = set()
@@ -267,32 +423,33 @@ def capture_evidence(workspace, snapshot, snapshot_sha, write=False):
         for edit in node["edits"]:
             key = "edit-" + node["id"] + "-" + edit
             expected.update({key, key + "-reset"})
-            changing.add(key)
+            if "noPixelFootprint" not in node:
+                changing.add(key)
     for behavior in snapshot["requirements"]["behaviorChecks"]:
         key = "behavior-" + behavior["id"]
         expected.update({key, key + "-reset"})
         if behavior["changesPixels"]:
             changing.add(key)
     require(set(capture["images"]) == expected, "missing-or-unexpected-capture")
-    files, baseline = [], None
+    files, baseline, visibility_frames = [], None, {}
     for key in ["baseline"] + sorted(expected - {"baseline"}):
-        url = capture["images"][key]
-        require(isinstance(url, str) and url.startswith("data:image/png;base64,"), "real-png-capture-required")
-        data = base64.b64decode(url.split(",", 1)[1], validate=True)
-        image = png(data)
-        require(list(image[:2]) == snapshot["artboard"], "capture-frame-mismatch")
+        image, data = capture_frame(capture["images"][key], snapshot, "real-png-capture-required")
         if key == "baseline":
             baseline = image[2]
         elif key.endswith("-reset"):
             require(image[2] == baseline, "reset-pixels-mismatch:" + key)
         elif key in changing:
             require(image[2] != baseline, "edit-has-no-visible-effect:" + key)
+        if key.startswith("edit-") and key.endswith("-visibility") and not key.endswith("-reset"):
+            visibility_frames[key[5:-11]] = image[2]
         name = str(AREA / "evidence" / (key + "." + digest(data) + ".png"))
         if write:
             atomic(local(workspace, name), data)
         require(local(workspace, name).read_bytes() == data, "missing-or-changed-produced-capture")
         files.append({"path": name, "sha256": digest(data)})
     inputs = read_json(local(workspace, str(AREA / "inputs.json")))
+    profile = read_json(local(workspace, inputs["profile"]))
+    node_evidence = node_provenance(capture, snapshot, baseline, visibility_frames, profile.get("resolution"))
     reference = png(local(workspace, inputs["reference"]).read_bytes())
     rendered = (*snapshot["artboard"], baseline)
     for feature in snapshot["requirements"]["criticalFeatures"]:
@@ -303,7 +460,7 @@ def capture_evidence(workspace, snapshot, snapshot_sha, write=False):
                 atomic(local(workspace, name), data)
             require(local(workspace, name).read_bytes() == data, "missing-or-changed-critical-crop")
             files.append({"path": name, "sha256": digest(data)})
-    return {"kind": "img2.pixi2d-evidence", "version": 1, "snapshotSha256": snapshot_sha, "capture": binding(workspace, str(AREA / "capture.json")), "files": files}
+    return {"kind": "img2.pixi2d-evidence", "version": 1, "snapshotSha256": snapshot_sha, "capture": binding(workspace, str(AREA / "capture.json")), "files": files, "nodeProvenance": node_evidence}
 
 
 def accepted_artifact(workspace):

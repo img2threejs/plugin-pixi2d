@@ -109,7 +109,12 @@ class HarnessReviewTests(unittest.TestCase):
             images[name + '-reset'] = images['baseline']
         images['behavior-lifecycle'] = images['baseline']
         images['behavior-lifecycle-reset'] = images['baseline']
-        capture = {'kind': 'img2.pixi2d-capture', 'version': 1, 'producer': 'pixi2d-native-capture-v1', 'snapshotSha256': sha(canonical(snapshot)), 'renderer': 'pixi.js', 'pixiVersion': '8.22.0', 'nodes': snapshot['requirements']['requiredNodes'], 'images': images}
+        capture = {'kind': 'img2.pixi2d-capture', 'version': 1, 'producer': 'pixi2d-native-capture-v2', 'snapshotSha256': sha(canonical(snapshot)), 'renderer': 'pixi.js', 'pixiVersion': '8.22.0', 'nodes': snapshot['requirements']['requiredNodes'], 'images': images,
+                   'provenance': {'contract': 'img2.pixi2d-node-provenance/v1', 'resolution': 1, 'nodes': [
+                       {'id': 'badge', 'type': 'Graphics', 'parent': None, 'visibleAtBaseline': True,
+                        'bounds': {'x': 0, 'y': 0, 'width': 3, 'height': 8},
+                        'isolation': {'method': 'visibility-toggle', 'isolated': images['edit-badge-visibility'],
+                                      'restored': images['baseline'], 'restoredVisible': True}}]}}
         self.put_json(str(AREA / 'capture.json'), capture)
         return snapshot, capture
 
@@ -136,6 +141,29 @@ class HarnessReviewTests(unittest.TestCase):
             self.assertEqual(data, fixture_png(width=4, height=4))
             self.assertEqual(sha(data), entry['sha256'])
         self.assertEqual(self.runner(0)['results'][0]['status'], 'pass')
+
+    def test_legacy_and_missing_provenance_are_refused(self):
+        _, capture = self.captured()
+        for producer, reason in (
+                ('pixi2d-native-capture-v1', 'capture-predates-node-provenance-contract'),
+                ('pixi2d-native-capture-v2', 'node-provenance-missing')):
+            with self.subTest(producer=producer):
+                candidate = copy.deepcopy(capture)
+                candidate['producer'] = producer
+                candidate.pop('provenance')
+                self.put_json(str(AREA / 'capture.json'), candidate)
+                self.assertIn(reason, self.cli('produce', 2)['reasons'])
+
+    def test_empty_or_out_of_bounds_node_footprints_are_refused(self):
+        _, capture = self.captured()
+        candidate = copy.deepcopy(capture)
+        candidate['provenance']['nodes'][0]['isolation']['isolated'] = capture['images']['baseline']
+        self.put_json(str(AREA / 'capture.json'), candidate)
+        self.assertIn('node-footprint-empty:badge', self.cli('produce', 2)['reasons'])
+        candidate = copy.deepcopy(capture)
+        candidate['provenance']['nodes'][0]['bounds']['x'] = 50
+        self.put_json(str(AREA / 'capture.json'), candidate)
+        self.assertIn('node-bounds-outside-artboard:badge', self.cli('produce', 2)['reasons'])
 
     def test_source_and_passing_prose_without_runtime_evidence_cannot_pass(self):
         self.cli('snapshot')
