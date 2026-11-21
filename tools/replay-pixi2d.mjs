@@ -150,6 +150,7 @@ async function boundWorkspace(workspace, mode) {
 
 function expectedFrames(snapshot) {
   const frames = ['baseline'];
+  for (const node of snapshot.requirements.requiredNodes) frames.push(`isolate-${node.id}`, `isolate-${node.id}-reset`);
   for (const node of snapshot.requirements.requiredNodes) for (const edit of node.edits) frames.push(`edit-${node.id}-${edit}`, `edit-${node.id}-${edit}-reset`);
   for (const behavior of snapshot.requirements.behaviorChecks) frames.push(`behavior-${behavior.id}`, `behavior-${behavior.id}-reset`);
   requireValue(new Set(frames).size === frames.length, 'ambiguous-capture-state-ids');
@@ -251,7 +252,8 @@ async function replayScene(state, runtime) {
     const replayCapture = {
       kind: 'img2.pixi2d-capture', version: 1, producer: 'pixi2d-cdp-replay-v1',
       snapshotSha256: state.snapshotSha256, renderer: 'pixi.js', pixiVersion: PIXI_VERSION,
-      nodes: state.snapshot.requirements.requiredNodes, images,
+      nodes: state.snapshot.requirements.requiredNodes,
+      images: Object.fromEntries(Object.entries(images).filter(([key]) => !key.startsWith('isolate-'))),
       nativeNodeProvenance: 'unevaluated', terminalAcceptance: false,
     };
     return { replayCapture, browserVersion: browser.version(), browserCommandLine: browserCommandLine.arguments, renderedHostSha256: sha(host), loadedResources, approvedRuntimeRequests: [...routes].map(([path, value]) => ({ path, sha256: sha(value.bytes) })) };

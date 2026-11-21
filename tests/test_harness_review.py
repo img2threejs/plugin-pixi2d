@@ -154,6 +154,12 @@ class HarnessReviewTests(unittest.TestCase):
                 self.put_json(str(AREA / 'capture.json'), candidate)
                 self.assertIn(reason, self.cli('produce', 2)['reasons'])
 
+    def test_cdp_replay_cannot_attest_native_node_provenance(self):
+        _, capture = self.captured()
+        capture['producer'] = 'pixi2d-cdp-replay-v1'
+        self.put_json(str(AREA / 'capture.json'), capture)
+        self.assertIn('cdp-replay-cannot-satisfy-node-provenance', self.cli('produce', 2)['reasons'])
+
     def test_empty_or_out_of_bounds_node_footprints_are_refused(self):
         _, capture = self.captured()
         candidate = copy.deepcopy(capture)
