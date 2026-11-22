@@ -11,3 +11,4 @@ node_modules/
 **/runtime/vendor/
 *.tgz
 *.zip
+_img2_local.py

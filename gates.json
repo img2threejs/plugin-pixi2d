@@ -1,0 +1,8 @@
+[
+  {
+    "id": "pixi2d-editable-review",
+    "command": "python3 {plugin_dir}/tools/pixi2d.py gate --workspace {workspace}",
+    "blocking": true,
+    "after": []
+  }
+]

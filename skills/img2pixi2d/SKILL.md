@@ -13,7 +13,7 @@ not a playground, demo generator or autonomous image-to-model service.
 ## Input and routing
 
 - Require one readable reference image. If absent, ask for it; never create a substitute reference.
-- Route editable 2D artwork (UI, illustration, objects, weapons, character cutouts) here. Use native PixiJS Containers, Graphics, Sprite, Text and 2D Mesh; layered parallax stays 2D.
+- Use this route only when the user explicitly requests editable 2D artwork (UI, illustration, objects, weapons, character cutouts). Use native PixiJS Containers, Graphics, Sprite, Text and 2D Mesh; layered parallax stays 2D. Never downgrade a 3D request.
 - Real 3D scene composition with Mesh3D, Sprite3D or Model3D: hand off to `img2pixi3d`; do not invent a 3D runtime here.
 - Novel-view or animation-ready 3D rig reconstruction from images still requires `img2threejs` or supplied geometry. Billboards are not recovered volumes.
 - Default to **hybrid fidelity**: preserve difficult reference pixels in independently movable layers; use native Text/Graphics for editable content.
@@ -23,6 +23,11 @@ not a playground, demo generator or autonomous image-to-model service.
 ## Workflow
 
 Run Python image tools from this skill's directory with Pillow in an isolated environment. The CLI exposes only `intake`, `crop` and `compare`; there is no executable 3D setup, beta installer or runtime integrator in this skill. For requested 3D, follow `img2pixi3d` instead.
+
+For img2 harness execution, also read `references/harness-review.md`. The root
+manifest/steps and stdlib adapter add snapshot, actual-host capture, native review
+and a blocking publication gate; they do not replace the image tools or grant
+advisories acceptance authority.
 
 1. **Observe before code.** Read `references/intake.md`; inspect the actual image using host vision. Identify subject, hierarchy, text, silhouettes, materials/patterns and identity-defining details. Separate observations from inference.
 2. **Admit the reference.** Run `python3 -m forge.cli intake <image> --workspace <project>/.img2pixi2d`. HTTPS needs explicit user consent and `--allow-network`. Preserve the original and normalized working PNG; do not modify either.
@@ -57,3 +62,5 @@ Run Python image tools from this skill's directory with Pillow in an isolated en
 - Single-image visual review and evidence: `references/review.md`.
 - Object mattes and protected neighbours: `references/object-separation.md`.
 - Amodal objects and disoccluded underlying layers: `references/occlusion-completion.md`.
+- Harness artifact, capture producer and blocking review: `references/harness-review.md`.
+- Isolated ESM/CDP diagnostic replay and its native-authority limit: `references/replay.md`.

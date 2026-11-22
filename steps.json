@@ -1,0 +1,44 @@
+[
+  {
+    "id": "pixi2d-author",
+    "title": "Reconstruct editable artwork in the existing PixiJS host",
+    "actor": "agent",
+    "command": "Read {plugin_dir}/SKILL.md and its harness review contract. Admit {image}, plan required nodes, critical features and the full requested behavior before rendering, and implement the subject-specific factory in {workspace}. Preserve source artwork and provenance. Write .img2/artifacts/pixi2d/inputs.json; this is an explicit-2D branch, never a downgrade from 3D.",
+    "after": []
+  },
+  {
+    "id": "pixi2d-snapshot",
+    "title": "Bind the source, plan, assets and render profile",
+    "actor": "program",
+    "command": "python3 {plugin_dir}/tools/pixi2d.py snapshot --workspace {workspace}",
+    "after": ["pixi2d-author"]
+  },
+  {
+    "id": "pixi2d-capture",
+    "title": "Capture the actual editable scene",
+    "actor": "agent",
+    "command": "Use {plugin_dir}/skills/img2pixi2d/runtime/review-capture.mjs inside the existing project with its actual PixiJS namespace, Application and scene handle. Freeze unrelated effects. Save its real output as .img2/artifacts/pixi2d/capture.json. Never fabricate captures, runtime reports or source identities.",
+    "after": ["pixi2d-snapshot"]
+  },
+  {
+    "id": "pixi2d-produce",
+    "title": "Produce checked capture files and critical crops",
+    "actor": "program",
+    "command": "python3 {plugin_dir}/tools/pixi2d.py produce --workspace {workspace}",
+    "after": ["pixi2d-capture"]
+  },
+  {
+    "id": "pixi2d-review",
+    "title": "Review all required visual and runtime evidence",
+    "actor": "agent",
+    "command": "Follow {plugin_dir}/skills/img2pixi2d/references/harness-review.md. Inspect the actual reference, baseline, critical crops, every mutation/reset and full requested motion evidence with native vision. Record every required assessment in .img2/artifacts/pixi2d/review.json. Missing, uncertain, failed or stale review blocks. Pixel hashes, arbitrary source text and numeric similarity alone are not visual acceptance.",
+    "after": ["pixi2d-produce"]
+  },
+  {
+    "id": "pixi2d-publish",
+    "title": "Publish only a currently reviewed editable 2D artifact",
+    "actor": "program",
+    "command": "python3 {plugin_dir}/tools/pixi2d.py publish --workspace {workspace}",
+    "after": ["pixi2d-review"]
+  }
+]

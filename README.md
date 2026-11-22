@@ -15,6 +15,12 @@
 
 The `img2pixi2d` skill turns a single reference image into an **editable** PixiJS v8 scene inside your existing host application: every named object is a real node you can move, hide, restyle or animate independently, with provenance preserved and inferred regions labelled honestly.
 
+`domain.json` registers the `pixi2d` profile for explicitly routed 2D child state. It adds no
+3D sculpt steps and does not bypass the separate evidence and terminal-review gates.
+Native capture v2 records per-node visibility isolation and bounds for pixel checks; these
+checks do not authenticate the host or replace independent visual review. Legacy captures
+and CDP replay do not satisfy the v2 provenance requirement.
+
 ---
 
 ## Table of contents
@@ -93,7 +99,14 @@ PLUGIN="$HOME/.local/share/img2threejs/pixi2d"
 
 The first `--yes` allows npx to download the CLI; the final `--yes` authorizes installer mutations. The installer clones a reviewed, pinned commit, prepares `.venv` with Pillow, and runs `omp plugin link`. It refuses dirty/unrelated checkouts and registrations pointing elsewhere. See [installer commands](cli/README.md).
 
-This is a **native OMP plugin**, not an img2 harness plugin; `img2 add pixi2d` is unsupported. Start a **new OMP session** after installation, then invoke `/skill:img2pixi2d` inside your existing PixiJS project.
+The existing installer remains a **native OMP** installer. This checkout also ships
+an img2 harness manifest (`image → pixi2d-scene`), an explicit-2D route card and a
+blocking editable-review gate. For a development link on harness ≥0.5.0, use
+`img2 add --link /absolute/path/to/pixi2d` (registration requires your authorization).
+See [`harness review contract`](skills/img2pixi2d/references/harness-review.md).
+The harness branch never substitutes 2D for a 3D request and does not enter 3D
+composition. Start a new host session after linking; the OMP skill remains
+`/skill:img2pixi2d`.
 
 ### Alternative: manual Git installation
 
@@ -251,6 +264,24 @@ pixi2d/
         └── references/      # reconstruction, pixijs, object-separation,
                              # occlusion-completion, review
 ```
+
+---
+
+## Diagnostic routed-scene replay
+
+The optional [isolated ESM/CDP replay](skills/img2pixi2d/references/replay.md)
+executes the exact bound scene adapter with pinned local Pixi/Chromium bytes and
+captures real external-browser pixels and edit/reset evidence. It does not attach
+to a user tab, install dependencies, call paid services or overwrite reviewed
+records. Unsupported original host factories are refused, not replaced.
+This is **not terminal acceptance**: native-node provenance remains unevaluated,
+and the base's native-capture-authority blocker is not cleared by these diagnostics.
+An additional [host-approved exact-source path](skills/img2pixi2d/references/replay.md#host-approved-exact-source-closure)
+can independently replay native capture evidence only after program code has
+explicitly reviewed the exact ESM/resource closure and approved runtime pins.
+No approval means fail-closed. Reviewed code is trusted code, **not** confinement
+or security for arbitrary same-realm JavaScript; artwork quality remains a separate
+authenticated review.
 
 ---
 
