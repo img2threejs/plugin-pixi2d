@@ -8,7 +8,7 @@
   "bin": { "img2pixi2d": "bin/cli.mjs" },
   "files": ["bin/cli.mjs"],
   "scripts": { "test": "node --test test/*.test.mjs" },
-  "repository": { "type": "git", "url": "https://github.com/img2threejs/pixi2d.git", "directory": "cli" },
+  "repository": { "type": "git", "url": "https://github.com/img2threejs/plugin-pixi2d.git", "directory": "cli" },
   "publishConfig": { "access": "public", "provenance": false },
   "keywords": ["img2threejs", "img2pixi2d", "pixijs", "omp", "installer"]
 }

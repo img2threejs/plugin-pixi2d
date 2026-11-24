@@ -287,7 +287,7 @@ authenticated review.
 
 ## License
 
-- **Skill, Python tools and example:** no repository-wide source-code license is declared. Public GitHub visibility and npm's `private: true` flag are not code licenses; contact the maintainers before reuse or redistribution beyond granted permissions.
+- **Skill, Python tools and example:** licensed under [Apache-2.0](LICENSE). This source-code grant does not cover user artwork or other third-party assets.
 - **npm installer:** Apache-2.0, scoped to `cli/`; see [`cli/LICENSE`](cli/LICENSE).
 - **img2 logo:** reused from the img2threejs brand asset under Apache-2.0; see [`assets/LICENSE`](assets/LICENSE).
 - **User artwork, fonts and reference images:** retain their own ownership and licensing. Repository access does not grant redistribution rights.
